@@ -9,7 +9,7 @@ const Gmail = () => {
   const [accessToken, setAccessToken] = useState('');
 
   // Gmail API設定（実際の使用時は環境変数で管理）
-  const CLIENT_ID = '963214323104-l7c17f6qgv0l3oemi4hf9ssfeu1ktjeo.apps.googleusercontent.com';
+  const CLIENT_ID = 'YOUR_GMAIL_CLIENT_ID';
   const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
 
   // Google Identity Services初期化
@@ -60,10 +60,11 @@ const Gmail = () => {
         });
         
         console.log('GAPI 初期化完了');
+        console.log('利用可能なAPI:', window.gapi.client);
       }
     } catch (err) {
       console.error('GAPI初期化エラー:', err);
-      setError('Gmail API の初期化に失敗しました');
+      setError('Gmail API の初期化に失敗しました: ' + err.message);
     }
   };
 
@@ -111,23 +112,38 @@ const Gmail = () => {
 
     try {
       // アクセストークンを設定
+      console.log('使用するアクセストークン:', accessToken.substring(0, 20) + '...');
       window.gapi.client.setToken({
         access_token: accessToken
       });
 
+      // API呼び出し前の確認
+      console.log('Gmail API呼び出し開始');
+      console.log('現在のトークン:', window.gapi.client.getToken());
+
+      // まず簡単なプロフィール取得をテスト
+      console.log('ユーザープロフィール取得テスト...');
+      const profileResponse = await window.gapi.client.gmail.users.getProfile({
+        userId: 'me'
+      });
+      console.log('プロフィール取得成功:', profileResponse);
+
       // メッセージリスト取得
+      console.log('メッセージリスト取得開始...');
       const response = await window.gapi.client.gmail.users.messages.list({
         userId: 'me',
         maxResults: 10,
         q: 'in:inbox'
       });
 
+      console.log('メッセージリスト取得成功:', response);
       const messages = response.result.messages || [];
       const emailDetails = [];
 
       // 各メールの詳細取得
       for (const message of messages) {
         try {
+          console.log(`メッセージ詳細取得: ${message.id}`);
           const detail = await window.gapi.client.gmail.users.messages.get({
             userId: 'me',
             id: message.id
@@ -172,13 +188,86 @@ const Gmail = () => {
       setEmails(emailDetails);
     } catch (err) {
       console.error('メール取得エラー:', err);
-      setError('メールの取得に失敗しました: ' + (err.message || String(err)));
+      
+      // 詳細なエラー情報を表示
+      let errorMessage = 'メールの取得に失敗しました';
+      if (err.result && err.result.error) {
+        errorMessage += `: ${err.result.error.message}`;
+        if (err.result.error.details) {
+          console.error('エラー詳細:', err.result.error.details);
+        }
+        console.error('完全なエラーオブジェクト:', err.result.error);
+      } else if (err.message) {
+        errorMessage += `: ${err.message}`;
+      }
+      
+      // HTTPステータスコードの確認
+      if (err.status) {
+        errorMessage += ` (HTTPステータス: ${err.status})`;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // モックデータでのデモ
+  // API接続テスト機能を追加
+  const testApiConnection = async () => {
+    if (!isAuthenticated || !accessToken) {
+      setError('先に認証を行ってください');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // アクセストークンを設定
+      window.gapi.client.setToken({
+        access_token: accessToken
+      });
+
+      console.log('=== API接続テスト開始 ===');
+      
+      // 1. トークン情報の確認
+      console.log('トークン情報:', {
+        token: accessToken.substring(0, 30) + '...',
+        tokenLength: accessToken.length
+      });
+
+      // 2. 直接HTTPリクエストでテスト
+      const testUrl = `https://www.googleapis.com/gmail/v1/users/me/profile`;
+      const testResponse = await fetch(testUrl, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('直接HTTP リクエストテスト:', {
+        status: testResponse.status,
+        statusText: testResponse.statusText,
+        ok: testResponse.ok
+      });
+
+      if (testResponse.ok) {
+        const profileData = await testResponse.json();
+        console.log('プロフィールデータ:', profileData);
+        setError('API接続テスト成功！Gmail APIにアクセスできています。');
+      } else {
+        const errorData = await testResponse.text();
+        console.error('HTTP エラーレスポンス:', errorData);
+        setError(`API接続テスト失敗 (${testResponse.status}): ${errorData}`);
+      }
+
+    } catch (err) {
+      console.error('API接続テストエラー:', err);
+      setError('API接続テストに失敗しました: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
   const fetchMockEmails = () => {
     setLoading(true);
     setError('');
@@ -311,15 +400,28 @@ const Gmail = () => {
 
       {/* メール取得ボタン */}
       {isAuthenticated && (
-        <div className="mb-6">
-          <button
-            onClick={fetchEmails}
-            disabled={loading}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 flex items-center"
-          >
-            <RefreshCw className={`mr-2 ${loading ? 'animate-spin' : ''}`} size={20} />
-            {loading ? 'メール取得中...' : 'メールを取得'}
-          </button>
+        <div className="mb-6 space-y-4">
+          <div className="flex space-x-4">
+            <button
+              onClick={testApiConnection}
+              disabled={loading}
+              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 flex items-center"
+            >
+              <AlertCircle className={`mr-2 ${loading ? 'animate-spin' : ''}`} size={20} />
+              {loading ? 'テスト中...' : 'API接続テスト'}
+            </button>
+            <button
+              onClick={fetchEmails}
+              disabled={loading}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 flex items-center"
+            >
+              <RefreshCw className={`mr-2 ${loading ? 'animate-spin' : ''}`} size={20} />
+              {loading ? 'メール取得中...' : 'メールを取得'}
+            </button>
+          </div>
+          <p className="text-sm text-gray-600">
+            ※ まず「API接続テスト」で接続を確認してから「メールを取得」してください
+          </p>
         </div>
       )}
 
@@ -351,6 +453,22 @@ const Gmail = () => {
             </p>
           </div>
         ))}
+      </div>
+
+      {/* 使用方法 */}
+      <div className="mt-8 bg-blue-50 rounded-lg p-6">
+        <h3 className="text-lg font-semibold mb-2">使用方法</h3>
+        <ol className="text-sm text-gray-700 space-y-1">
+          <li>1. Google Cloud Consoleでプロジェクトを作成し、Gmail APIを有効化</li>
+          <li>2. OAuth 2.0クライアントID（CLIENT_ID）を取得してコードに設定</li>
+          <li>3. OAuth同意画面を設定（スコープ: gmail.readonly）</li>
+          <li>4. 承認済みのJavaScriptドメインにlocalhost:3000を追加</li>
+          <li>5. 「Googleでサインイン」ボタンで認証</li>
+          <li>6. 「メールを取得」ボタンでメールデータを取得</li>
+        </ol>
+        <p className="text-xs text-gray-500 mt-2">
+          ※ 新しいGoogle Identity Servicesを使用しています
+        </p>
       </div>
     </div>
   );
