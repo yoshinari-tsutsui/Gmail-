@@ -12,13 +12,38 @@
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
     <!-- Google APIs - Gmail API用 -->
     <script src="https://apis.google.com/js/api.js"></script>
+    
+    <!-- Google Identity Services - 新しい認証システム -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
+    <!-- Tailwind設定のカスタマイズ -->
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'gmail-blue': '#4285f4',
+              'gmail-red': '#ea4335',
+            }
+          }
+        }
+      }
+    </script>
     
     <title>Gmail取得アプリ</title>
   </head>
   <body>
     <noscript>このアプリケーションを実行するにはJavaScriptを有効にしてください。</noscript>
     <div id="root"></div>
+    
+    <!-- 
+      このHTMLファイルはテンプレートです。
+      ビルド時に、Reactコンポーネントが#rootの中に挿入されます。
+    -->
   </body>
 </html>
