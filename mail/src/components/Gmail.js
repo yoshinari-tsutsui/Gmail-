@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, RefreshCw, User, Calendar, AlertCircle, CheckSquare, Clock, AlertTriangle } from 'lucide-react';
+import { Mail, RefreshCw, User, Calendar, AlertCircle, CheckSquare, Clock, AlertTriangle, Search, X } from 'lucide-react';
 
 const Gmail = () => {
   const [emails, setEmails] = useState([]);
@@ -9,6 +9,11 @@ const Gmail = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [accessToken, setAccessToken] = useState('');
   const [activeTab, setActiveTab] = useState('emails');
+  
+  // 検索機能用のstate
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredEmails, setFilteredEmails] = useState([]);
+  const [filteredTasks, setFilteredTasks] = useState([]);
 
   // タスク抽出のキーワードパターン
   const taskKeywords = [
@@ -72,6 +77,45 @@ const Gmail = () => {
 
     return extractedTasks;
   };
+
+  // 検索フィルタリング関数
+  const filterItems = (items, query) => {
+    if (!query.trim()) return items;
+    
+    const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 0);
+    
+    return items.filter(item => {
+      const searchableText = `${item.subject} ${item.from} ${item.snippet}`.toLowerCase();
+      return searchTerms.every(term => searchableText.includes(term));
+    });
+  };
+
+  // 検索ハイライト関数
+  const highlightText = (text, query) => {
+    if (!query.trim()) return text;
+    
+    const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 0);
+    let highlightedText = text;
+    
+    searchTerms.forEach(term => {
+      const regex = new RegExp(`(${term})`, 'gi');
+      highlightedText = highlightedText.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
+    });
+    
+    return highlightedText;
+  };
+
+  // 検索処理
+  useEffect(() => {
+    setFilteredEmails(filterItems(emails, searchQuery));
+    setFilteredTasks(filterItems(tasks, searchQuery));
+  }, [emails, tasks, searchQuery]);
+
+  // 検索クリア
+  const clearSearch = () => {
+    setSearchQuery('');
+  };
+
   // Gmail API設定
   const CLIENT_ID = '429790609827-0l8355kbpj6jfk49p2jsk16dchqr854j.apps.googleusercontent.com';
   const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
@@ -124,6 +168,7 @@ const Gmail = () => {
           setEmails([]);
           setTasks([]);
           setError('');
+          setSearchQuery(''); // 検索もクリア
         });
       } else {
         setAccessToken('');
@@ -131,13 +176,12 @@ const Gmail = () => {
         setEmails([]);
         setTasks([]);
         setError('');
+        setSearchQuery(''); // 検索もクリア
       }
     } catch (err) {
       setError('サインアウトに失敗しました');
     }
   };
-
-
 
   const fetchEmails = async () => {
     if (!isAuthenticated || !accessToken) {
@@ -317,6 +361,37 @@ const Gmail = () => {
         </div>
       )}
 
+      {/* 検索ボックス */}
+      {(emails.length > 0 || tasks.length > 0) && (
+        <div className="mb-6">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="メールとタスクを検索... (件名、送信者、内容)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+          {searchQuery && (
+            <div className="mt-2 text-sm text-gray-600">
+              検索結果: メール {filteredEmails.length}件, タスク {filteredTasks.length}件
+            </div>
+          )}
+        </div>
+      )}
+
       {/* タブ切り替え */}
       {(emails.length > 0 || tasks.length > 0) && (
         <div className="mb-6">
@@ -330,7 +405,7 @@ const Gmail = () => {
               }`}
             >
               <Mail className="inline mr-2" size={20} />
-              全メール ({emails.length})
+              全メール ({searchQuery ? filteredEmails.length : emails.length})
             </button>
             <button
               onClick={() => setActiveTab('tasks')}
@@ -341,7 +416,7 @@ const Gmail = () => {
               }`}
             >
               <CheckSquare className="inline mr-2" size={20} />
-              タスク ({tasks.length})
+              タスク ({searchQuery ? filteredTasks.length : tasks.length})
             </button>
           </div>
         </div>
@@ -350,21 +425,43 @@ const Gmail = () => {
       <div className="space-y-4">
         {activeTab === 'emails' && (
           <>
-            <h2 className="text-xl font-semibold">メール一覧 ({emails.length}件)</h2>
+            <h2 className="text-xl font-semibold">
+              メール一覧 ({searchQuery ? filteredEmails.length : emails.length}件)
+              {searchQuery && (
+                <span className="text-sm text-gray-500 ml-2">
+                  「{searchQuery}」の検索結果
+                </span>
+              )}
+            </h2>
             {loading && <p className="text-gray-500 text-center py-8">読み込み中...</p>}
-            {emails.length === 0 && !loading && <p className="text-gray-500 text-center py-8">メールがありません</p>}
-            {emails.map((email) => (
+            {filteredEmails.length === 0 && !loading && emails.length > 0 && searchQuery && (
+              <div className="text-center py-8">
+                <Search className="mx-auto mb-4 text-gray-400" size={48} />
+                <p className="text-gray-500">「{searchQuery}」に一致するメールが見つかりませんでした</p>
+              </div>
+            )}
+            {filteredEmails.length === 0 && !loading && emails.length === 0 && !searchQuery && (
+              <p className="text-gray-500 text-center py-8">メールがありません</p>
+            )}
+            {filteredEmails.map((email) => (
               <div key={email.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-semibold text-lg text-gray-800 flex-1">{email.subject}</h3>
+                  <h3 
+                    className="font-semibold text-lg text-gray-800 flex-1"
+                    dangerouslySetInnerHTML={{ __html: highlightText(email.subject, searchQuery) }}
+                  />
                   <div className="flex items-center text-gray-500 text-sm ml-4 whitespace-nowrap">
                     <Calendar size={16} className="mr-1" />{email.date}
                   </div>
                 </div>
                 <div className="flex items-center text-gray-600 text-sm mb-2">
-                  <User size={16} className="mr-1" />{email.from}
+                  <User size={16} className="mr-1" />
+                  <span dangerouslySetInnerHTML={{ __html: highlightText(email.from, searchQuery) }} />
                 </div>
-                <p className="text-gray-700 text-sm leading-relaxed">{email.snippet}</p>
+                <p 
+                  className="text-gray-700 text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: highlightText(email.snippet, searchQuery) }}
+                />
               </div>
             ))}
           </>
@@ -374,19 +471,30 @@ const Gmail = () => {
           <>
             <h2 className="text-xl font-semibold flex items-center">
               <CheckSquare className="mr-2" />
-              対応が必要なタスク ({tasks.length}件)
+              対応が必要なタスク ({searchQuery ? filteredTasks.length : tasks.length}件)
+              {searchQuery && (
+                <span className="text-sm text-gray-500 ml-2">
+                  「{searchQuery}」の検索結果
+                </span>
+              )}
             </h2>
             {loading && <p className="text-gray-500 text-center py-8">読み込み中...</p>}
-            {tasks.length === 0 && !loading && emails.length > 0 && (
+            {filteredTasks.length === 0 && !loading && tasks.length > 0 && searchQuery && (
+              <div className="text-center py-8">
+                <Search className="mx-auto mb-4 text-gray-400" size={48} />
+                <p className="text-gray-500">「{searchQuery}」に一致するタスクが見つかりませんでした</p>
+              </div>
+            )}
+            {filteredTasks.length === 0 && !loading && tasks.length === 0 && emails.length > 0 && !searchQuery && (
               <div className="text-center py-8">
                 <CheckSquare className="mx-auto mb-4 text-green-500" size={48} />
                 <p className="text-gray-500">対応が必要なタスクはありません！</p>
               </div>
             )}
-            {tasks.length === 0 && !loading && emails.length === 0 && (
+            {filteredTasks.length === 0 && !loading && emails.length === 0 && (
               <p className="text-gray-500 text-center py-8">まずメールを取得してください</p>
             )}
-            {tasks.map((task) => (
+            {filteredTasks.map((task) => (
               <div key={task.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
@@ -397,7 +505,10 @@ const Gmail = () => {
                         {task.priority.level === 'low' && <CheckSquare size={12} className="mr-1" />}
                         {task.priority.label}
                       </span>
-                      <h3 className="font-semibold text-lg text-gray-800">{task.subject}</h3>
+                      <h3 
+                        className="font-semibold text-lg text-gray-800"
+                        dangerouslySetInnerHTML={{ __html: highlightText(task.subject, searchQuery) }}
+                      />
                     </div>
                   </div>
                   <div className="flex items-center text-gray-500 text-sm ml-4 whitespace-nowrap">
@@ -405,9 +516,13 @@ const Gmail = () => {
                   </div>
                 </div>
                 <div className="flex items-center text-gray-600 text-sm mb-2">
-                  <User size={16} className="mr-1" />{task.from}
+                  <User size={16} className="mr-1" />
+                  <span dangerouslySetInnerHTML={{ __html: highlightText(task.from, searchQuery) }} />
                 </div>
-                <p className="text-gray-700 text-sm leading-relaxed">{task.snippet}</p>
+                <p 
+                  className="text-gray-700 text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: highlightText(task.snippet, searchQuery) }}
+                />
               </div>
             ))}
           </>
