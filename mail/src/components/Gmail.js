@@ -14,6 +14,11 @@ const Gmail = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredEmails, setFilteredEmails] = useState([]);
   const [filteredTasks, setFilteredTasks] = useState([]);
+  
+  // タスク管理用のstate
+  const [completedTasks, setCompletedTasks] = useState(new Set());
+  const [priorityFilter, setPriorityFilter] = useState('all'); // 'all', 'high', 'medium', 'low'
+  const [showCompleted, setShowCompleted] = useState(true);
 
   // タスク抽出のキーワードパターン
   const taskKeywords = [
@@ -90,6 +95,43 @@ const Gmail = () => {
     });
   };
 
+  // タスクフィルタリング関数（検索 + 緊急度 + 完了状態）
+  const filterTasks = (tasks, query, priorityFilter, showCompleted, completedTasks) => {
+    let filtered = tasks;
+    
+    // 検索フィルター
+    if (query.trim()) {
+      const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 0);
+      filtered = filtered.filter(task => {
+        const searchableText = `${task.subject} ${task.from} ${task.snippet}`.toLowerCase();
+        return searchTerms.every(term => searchableText.includes(term));
+      });
+    }
+    
+    // 緊急度フィルター
+    if (priorityFilter !== 'all') {
+      filtered = filtered.filter(task => task.priority.level === priorityFilter);
+    }
+    
+    // 完了状態フィルター
+    if (!showCompleted) {
+      filtered = filtered.filter(task => !completedTasks.has(task.id));
+    }
+    
+    return filtered;
+  };
+
+  // タスク完了状態の切り替え
+  const toggleTaskCompletion = (taskId) => {
+    const newCompletedTasks = new Set(completedTasks);
+    if (newCompletedTasks.has(taskId)) {
+      newCompletedTasks.delete(taskId);
+    } else {
+      newCompletedTasks.add(taskId);
+    }
+    setCompletedTasks(newCompletedTasks);
+  };
+
   // 検索ハイライト関数
   const highlightText = (text, query) => {
     if (!query.trim()) return text;
@@ -108,8 +150,8 @@ const Gmail = () => {
   // 検索処理
   useEffect(() => {
     setFilteredEmails(filterItems(emails, searchQuery));
-    setFilteredTasks(filterItems(tasks, searchQuery));
-  }, [emails, tasks, searchQuery]);
+    setFilteredTasks(filterTasks(tasks, searchQuery, priorityFilter, showCompleted, completedTasks));
+  }, [emails, tasks, searchQuery, priorityFilter, showCompleted, completedTasks]);
 
   // 検索クリア
   const clearSearch = () => {
@@ -169,6 +211,9 @@ const Gmail = () => {
           setTasks([]);
           setError('');
           setSearchQuery(''); // 検索もクリア
+          setCompletedTasks(new Set()); // 完了タスクもクリア
+          setPriorityFilter('all'); // フィルターもリセット
+          setShowCompleted(true);
         });
       } else {
         setAccessToken('');
@@ -177,6 +222,9 @@ const Gmail = () => {
         setTasks([]);
         setError('');
         setSearchQuery(''); // 検索もクリア
+        setCompletedTasks(new Set()); // 完了タスクもクリア
+        setPriorityFilter('all'); // フィルターもリセット
+        setShowCompleted(true);
       }
     } catch (err) {
       setError('サインアウトに失敗しました');
@@ -387,8 +435,88 @@ const Gmail = () => {
           {searchQuery && (
             <div className="mt-2 text-sm text-gray-600">
               検索結果: メール {filteredEmails.length}件, タスク {filteredTasks.length}件
+              {activeTab === 'tasks' && (priorityFilter !== 'all' || !showCompleted) && (
+                <span className="ml-2 text-gray-500">
+                  (フィルター適用中)
+                </span>
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* タスクフィルター（タスクタブのみ表示） */}
+      {tasks.length > 0 && activeTab === 'tasks' && (
+        <div className="mb-6 bg-gray-50 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-gray-700 mb-3">フィルター</h3>
+          <div className="flex flex-wrap gap-4 items-center">
+            {/* 緊急度フィルター */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">緊急度:</span>
+              <div className="flex space-x-1">
+                <button
+                  onClick={() => setPriorityFilter('all')}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    priorityFilter === 'all' 
+                      ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  全て
+                </button>
+                <button
+                  onClick={() => setPriorityFilter('high')}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    priorityFilter === 'high' 
+                      ? 'bg-red-100 text-red-800 border border-red-200' 
+                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  緊急
+                </button>
+                <button
+                  onClick={() => setPriorityFilter('medium')}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    priorityFilter === 'medium' 
+                      ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' 
+                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  中
+                </button>
+                <button
+                  onClick={() => setPriorityFilter('low')}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    priorityFilter === 'low' 
+                      ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  通常
+                </button>
+              </div>
+            </div>
+
+            {/* 完了タスク表示切り替え */}
+            <div className="flex items-center space-x-2">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showCompleted}
+                  onChange={(e) => setShowCompleted(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                />
+                <span className="ml-2 text-sm text-gray-600">完了済みタスクを表示</span>
+              </label>
+            </div>
+
+            {/* 統計情報 */}
+            <div className="flex space-x-4 text-xs text-gray-500 ml-auto">
+              <span>全体: {tasks.length}件</span>
+              <span>完了: {completedTasks.size}件</span>
+              <span>未完了: {tasks.length - completedTasks.size}件</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -494,37 +622,68 @@ const Gmail = () => {
             {filteredTasks.length === 0 && !loading && emails.length === 0 && (
               <p className="text-gray-500 text-center py-8">まずメールを取得してください</p>
             )}
-            {filteredTasks.map((task) => (
-              <div key={task.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <div className="flex items-center mb-2">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-3 ${task.priority.color}`}>
-                        {task.priority.level === 'high' && <AlertTriangle size={12} className="mr-1" />}
-                        {task.priority.level === 'medium' && <Clock size={12} className="mr-1" />}
-                        {task.priority.level === 'low' && <CheckSquare size={12} className="mr-1" />}
-                        {task.priority.label}
-                      </span>
-                      <h3 
-                        className="font-semibold text-lg text-gray-800"
-                        dangerouslySetInnerHTML={{ __html: highlightText(task.subject, searchQuery) }}
-                      />
+            {filteredTasks.map((task) => {
+              const isCompleted = completedTasks.has(task.id);
+              return (
+                <div key={task.id} className={`border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200 ${
+                  isCompleted ? 'bg-gray-50 opacity-75' : 'bg-white'
+                }`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start flex-1">
+                      {/* 完了チェックボックス */}
+                      <button
+                        onClick={() => toggleTaskCompletion(task.id)}
+                        className={`flex-shrink-0 w-5 h-5 rounded border-2 mr-3 mt-0.5 transition-colors ${
+                          isCompleted 
+                            ? 'bg-green-500 border-green-500 text-white' 
+                            : 'border-gray-300 hover:border-green-400'
+                        }`}
+                      >
+                        {isCompleted && (
+                          <CheckSquare size={14} className="w-full h-full" />
+                        )}
+                      </button>
+                      
+                      <div className="flex-1">
+                        <div className="flex items-center mb-2">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-3 ${task.priority.color}`}>
+                            {task.priority.level === 'high' && <AlertTriangle size={12} className="mr-1" />}
+                            {task.priority.level === 'medium' && <Clock size={12} className="mr-1" />}
+                            {task.priority.level === 'low' && <CheckSquare size={12} className="mr-1" />}
+                            {task.priority.label}
+                          </span>
+                          <h3 
+                            className={`font-semibold text-lg ${
+                              isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'
+                            }`}
+                            dangerouslySetInnerHTML={{ __html: highlightText(task.subject, searchQuery) }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center text-gray-500 text-sm ml-4 whitespace-nowrap">
+                      <Calendar size={16} className="mr-1" />{task.date}
                     </div>
                   </div>
-                  <div className="flex items-center text-gray-500 text-sm ml-4 whitespace-nowrap">
-                    <Calendar size={16} className="mr-1" />{task.date}
+                  <div className={`flex items-center text-sm mb-2 ml-8 ${isCompleted ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <User size={16} className="mr-1" />
+                    <span dangerouslySetInnerHTML={{ __html: highlightText(task.from, searchQuery) }} />
                   </div>
+                  <p 
+                    className={`text-sm leading-relaxed ml-8 ${isCompleted ? 'text-gray-400' : 'text-gray-700'}`}
+                    dangerouslySetInnerHTML={{ __html: highlightText(task.snippet, searchQuery) }}
+                  />
+                  {isCompleted && (
+                    <div className="ml-8 mt-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckSquare size={12} className="mr-1" />
+                        完了済み
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center text-gray-600 text-sm mb-2">
-                  <User size={16} className="mr-1" />
-                  <span dangerouslySetInnerHTML={{ __html: highlightText(task.from, searchQuery) }} />
-                </div>
-                <p 
-                  className="text-gray-700 text-sm leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: highlightText(task.snippet, searchQuery) }}
-                />
-              </div>
-            ))}
+              );
+            })}
           </>
         )}
       </div>
